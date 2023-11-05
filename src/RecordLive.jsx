@@ -24,7 +24,7 @@ const RecordLive = () => {
     openCamera().then(async () => {
       // const roomID = location.pathname.split("/");
       webSocketRef.current = new WebSocket(
-        `wss://owino-backend-go.onrender.com/ws`
+        `wss://streaming-app-server-v6yx.onrender.com/ws/webtrc`
       );
 
       await webSocketRef.current.addEventListener("open", () => {
