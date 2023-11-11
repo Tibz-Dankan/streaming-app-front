@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 
-// import { useLocation } from "react-router-dom";
-
 const RecordLive = () => {
-  // const location = useLocation();
+  const [isWebSocketOpen, setIsWebSocketOpen] = useState(false);
+
   const userVideo = useRef();
   const userStream = useRef();
   const partnerVideo = useRef();
@@ -20,18 +19,19 @@ const RecordLive = () => {
       userStream.current = stream;
     });
   };
+
   useEffect(() => {
     openCamera().then(async () => {
-      // const roomID = location.pathname.split("/");
       webSocketRef.current = new WebSocket(
         `wss://streaming-app-server-v6yx.onrender.com/ws/webtrc`
       );
 
-      await webSocketRef.current.addEventListener("open", () => {
-        webSocketRef.current.send(JSON.stringify({ join: true }));
+      webSocketRef.current.addEventListener("open", () => {
+        setIsWebSocketOpen(true);
+        console.log("WebSocket connection established!");
       });
 
-      await webSocketRef.current.addEventListener("message", async (e) => {
+      webSocketRef.current.addEventListener("message", async (e) => {
         const message = JSON.parse(e.data);
 
         if (message.join) {
@@ -54,12 +54,12 @@ const RecordLive = () => {
           try {
             await peerRef.current.addIceCandidate(message.iceCandidate);
           } catch (err) {
-            console.log("error ICE CANDIDADE");
+            console.log("error ICE CANDIDATE");
           }
         }
       });
     });
-  });
+  }, []);
 
   const handleOffer = async (offer) => {
     console.log("Received Offer, Creating Answer");
@@ -68,25 +68,19 @@ const RecordLive = () => {
     await peerRef.current.setRemoteDescription(
       new RTCSessionDescription(offer)
     );
-    console.log(
-      "remote description protocol",
-      await peerRef.current.setRemoteDescription(
-        new RTCSessionDescription(offer)
-      )
-    );
 
     await userStream.current.getTracks().forEach((track) => {
       peerRef.current.addTrack(track, userStream.current);
     });
 
     const answer = await peerRef.current.createAnswer();
-    const localSDP = await peerRef.current.setLocalDescription(answer);
-    console.log("local sdp", localSDP);
-    console.log("local description protocol", answer);
+    await peerRef.current.setLocalDescription(answer);
 
-    await webSocketRef.current.send(
-      JSON.stringify({ answer: peerRef.current.localDescription })
-    );
+    if (isWebSocketOpen) {
+      await webSocketRef.current.send(
+        JSON.stringify({ answer: peerRef.current.localDescription })
+      );
+    }
   };
 
   const callUser = async () => {
@@ -118,16 +112,19 @@ const RecordLive = () => {
       const myOffer = await peerRef.current.createOffer();
       await peerRef.current.setLocalDescription(myOffer);
 
-      await webSocketRef.current.send(
-        JSON.stringify({ offer: peerRef.current.localDescription })
-      );
-    } catch (err) {}
+      if (isWebSocketOpen) {
+        await webSocketRef.current.send(
+          JSON.stringify({ offer: peerRef.current.localDescription })
+        );
+      }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleIceCandidateEvent = async (e) => {
     console.log("Found Ice Candidate");
-    if (e.candidate) {
-      console.log(e.candidate);
+    if (isWebSocketOpen && e.candidate) {
       await webSocketRef.current.send(
         JSON.stringify({ iceCandidate: e.candidate })
       );
