@@ -26,24 +26,21 @@ const RecordLive = () => {
         `wss://streaming-app-server-v6yx.onrender.com/ws/webtrc`
       );
 
+      // On socket connect
       webSocketRef.current.addEventListener("open", () => {
-        setIsWebSocketOpen(true);
+        setIsWebSocketOpen(() => true);
         console.log("WebSocket connection established!");
+        peerRef.current = createPeer();
+        // handleNegotiationNeeded();
       });
 
       webSocketRef.current.addEventListener("message", async (e) => {
         const message = JSON.parse(e.data);
-
-        if (message.join) {
-          callUser();
-        }
-
-        if (message.offer) {
-          handleOffer(message.offer);
-        }
+        console.log("message", message);
 
         if (message.answer) {
-          console.log("Receiving Answer");
+          console.log("Receiving Answer from the server");
+          console.log("Answer from the server", message);
           peerRef.current.setRemoteDescription(
             new RTCSessionDescription(message.answer)
           );
@@ -58,39 +55,14 @@ const RecordLive = () => {
           }
         }
       });
+      // On socket disconnect
+      webSocketRef.current.addEventListener("close", () => {
+        setIsWebSocketOpen(() => false);
+        console.log("WebSocket connection closed!");
+        // You can add additional logic here if needed
+      });
     });
-  }, []);
-
-  const handleOffer = async (offer) => {
-    console.log("Received Offer, Creating Answer");
-    peerRef.current = createPeer();
-
-    await peerRef.current.setRemoteDescription(
-      new RTCSessionDescription(offer)
-    );
-
-    await userStream.current.getTracks().forEach((track) => {
-      peerRef.current.addTrack(track, userStream.current);
-    });
-
-    const answer = await peerRef.current.createAnswer();
-    await peerRef.current.setLocalDescription(answer);
-
-    if (isWebSocketOpen) {
-      await webSocketRef.current.send(
-        JSON.stringify({ answer: peerRef.current.localDescription })
-      );
-    }
-  };
-
-  const callUser = async () => {
-    console.log("Calling Other User");
-    peerRef.current = createPeer();
-
-    await userStream.current.getTracks().forEach(async (track) => {
-      await peerRef.current.addTrack(track, userStream.current);
-    });
-  };
+  }, [isWebSocketOpen, setIsWebSocketOpen]);
 
   const createPeer = () => {
     console.log("Creating Peer Connection");
@@ -113,8 +85,14 @@ const RecordLive = () => {
       await peerRef.current.setLocalDescription(myOffer);
 
       if (isWebSocketOpen) {
+        console.log("sending offer to the server");
+        console.log(
+          "peerRef.current.localDescription",
+          peerRef.current.localDescription
+        );
         await webSocketRef.current.send(
-          JSON.stringify({ offer: peerRef.current.localDescription })
+          // JSON.stringify({ offer: peerRef.current.localDescription })
+          JSON.stringify(peerRef.current.localDescription)
         );
       }
     } catch (err) {
@@ -125,6 +103,7 @@ const RecordLive = () => {
   const handleIceCandidateEvent = async (e) => {
     console.log("Found Ice Candidate");
     if (isWebSocketOpen && e.candidate) {
+      console.log("sending Icecandidate to the server");
       await webSocketRef.current.send(
         JSON.stringify({ iceCandidate: e.candidate })
       );
